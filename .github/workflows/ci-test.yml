@@ -32,29 +32,6 @@ jobs:
             - name: SCM Checkout
               id: checkout
               uses: actions/checkout@v7
-            # - name: "Setup tags for ${{ github.ref }}"
-            #   run: |
-            #     if [ "$GITHUB_REF" == "refs/heads/master" ]; then
-            #     echo "DOCKER_TAG=latest" >> $GITHUB_ENV
-            #     else
-            #     echo "DOCKER_TAG=snapshot" >> $GITHUB_ENV
-            #     fi
-            #     echo "VCS_REF=`git rev-parse --short HEAD`" >> $GITHUB_ENV
-            #     echo "BUILD_DATE=`date -u +”%Y-%m-%dT%H:%M:%SZ”`" >> $GITHUB_ENV
-            - name: Debug OIDC + role
-              env:
-                ROLE: ${{ secrets.AWS_IAM_ROLE }}
-              run: |
-                # 1. Does the secret exactly match the role ARN?
-                if [ "$ROLE" = "arn:aws:iam::660383922069:role/github-actions-role" ]; then
-                  echo "Secret: MATCH"
-                else
-                  echo "Secret: MISMATCH (length ${#ROLE}, expected 51)"
-                fi
-                # 2. What sub/aud is GitHub sending?
-                TOKEN=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-                  "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
-                echo "$TOKEN" | cut -d. -f2 | python3 -c "import sys,base64,json; p=sys.stdin.read().strip(); p+='='*(-len(p)%4); d=json.loads(base64.urlsafe_b64decode(p)); print(json.dumps({k:d.get(k) for k in ('sub','aud','iss')}, indent=2))"
             - name: Setup Credentials AWS
               id: aws-auth-setup
               uses: aws-actions/configure-aws-credentials@v6
@@ -65,9 +42,11 @@ jobs:
             - name: Amazon ECR Login
               id: login-ecr
               uses: aws-actions/amazon-ecr-login@v2
+              with:
+                registry-type: public
             - name: Build and push image
               env:
-                ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+                ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }} # = public.ecr.aws
                 REGISTRY_ALIAS: s6y9v0i2
                 ECR_REPOSITORY: gh-actions-cicd
                 IMAGE_TAG: ${{ github.sha }}
