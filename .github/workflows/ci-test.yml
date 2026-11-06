@@ -39,7 +39,8 @@ jobs:
               id: aws-auth-setup
               uses: aws-actions/configure-aws-credentials@v6
               with:
-                role-to-assume: arn:aws:iam::660383922069:role/github-actions-ecr
+                audience: sts.amazonaws.com
+                role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
                 aws-region: ${{ vars.AWS_REGION }}
             - name: Amazon ECR Login
               id: login-ecr
