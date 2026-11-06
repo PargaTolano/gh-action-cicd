@@ -1,16 +1,32 @@
 name: cd-test
 run-name: Deploying New Builds
 on:
-    workflow_dispatch:
-    issue_comment:
-        types: [created]
+    workflow_run:
+        workflows: ["ci-test"]
+        types:
+            - completed
 jobs:
     deploy-ecs-express:
         runs-on: ubuntu-latest
+        if: github.event.workflow_run.conclusion == 'success'
         permissions:
             id-token: write # required for OIDC
             contents: read  # required for checkout
+            actions: read   # required to download artifacts from another run
+        env:
+            ECR_REGISTRY: ${{ vars.AWS_REGISTRY }} # = public.ecr.aws
+            REGISTRY_ALIAS: ${{ vars.AWS_REGISTRY_ALIAS }}
+            ECR_REPOSITORY: ${{ vars.AWS_REPOSITORY }}
         steps:
+            - name: Download image tag from CI run
+              uses: actions/download-artifact@v4
+              with:
+                name: image-tag
+                run-id: ${{ github.event.workflow_run.id }}
+                github-token: ${{ github.token }}
+            - name: Read image tag
+              id: tag
+              run: echo "image-tag=$(cat image-tag.txt)" >> "$GITHUB_OUTPUT"
             - name: Setup Credentials AWS
               id: aws-auth-setup
               uses: aws-actions/configure-aws-credentials@v6
@@ -18,15 +34,10 @@ jobs:
                 audience: sts.amazonaws.com
                 role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
                 aws-region: ${{ vars.AWS_REGION }}
-            - name: Amazon ECR Login
-              id: login-ecr
-              uses: aws-actions/amazon-ecr-login@v2
-              with:
-                registry-type: public
             - name: Deploy to ECS Express Mode
               uses: aws-actions/amazon-ecs-deploy-express-service@v1
               with:
                   service-name: go-app
-                  image: ${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+                  image: ${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.ECR_REPOSITORY }}:${{ steps.tag.outputs.image-tag }}
                   execution-role-arn: ${{ secrets.IAM_ECS_EXECUTION_ROLE }}
                   infrastructure-role-arn: ${{ secrets.IAM_ECS_INFRASTRUCTURE_ROLE }}
