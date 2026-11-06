@@ -1,0 +1,54 @@
+name: ci-test
+run-name: Testing New Builds
+on:
+    workflow_dispatch:
+    issue_comment:
+        types: [created]
+jobs:
+    unit-testing:
+        runs-on: ubuntu-latest
+        if: |
+            github.event_name == 'workflow_dispatch' ||
+            (github.event.issue.pull_request && contains(github.event.comment.body, 'Build'))
+        steps:
+            - name: SCM Checkout
+              id: checkout
+              uses: actions/checkout@v7
+            - name: Install GO
+              uses: actions/setup-go@v7
+              with:
+                go-version: '1.22'
+                token: ${{ github.token }}
+                cache: true
+            - name: Run tests
+              run: go test -v -race
+    build:
+        runs-on: ubuntu-latest
+        needs: unit-testing
+        steps:
+            # - name: "Setup tags for ${{ github.ref }}"
+            #   run: |
+            #     if [ "$GITHUB_REF" == "refs/heads/master" ]; then
+            #     echo "DOCKER_TAG=latest" >> $GITHUB_ENV
+            #     else
+            #     echo "DOCKER_TAG=snapshot" >> $GITHUB_ENV
+            #     fi
+            #     echo "VCS_REF=`git rev-parse --short HEAD`" >> $GITHUB_ENV
+            #     echo "BUILD_DATE=`date -u +”%Y-%m-%dT%H:%M:%SZ”`" >> $GITHUB_ENV
+            - name: Setup Credentials AWS
+              id: aws-auth-setup
+              uses: aws-actions/configure-aws-credentials@v6
+              with:
+                role-to-assume: arn:aws:iam::660383922069:role/github-actions-ecr
+                aws-region: ${{ vars.AWS_REGION }}
+            - name: Amazon ECR Login
+              id: login-ecr
+              uses: aws-actions/amazon-ecr-login@v2
+            - name: Build and push image
+              env:
+                ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+                ECR_REPOSITORY: gh-actions-cicd
+                IMAGE_TAG: ${{ github.sha }}
+              run: |
+                docker build - t ${{ env.ECR_REGISTRY}}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} .
+                docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
