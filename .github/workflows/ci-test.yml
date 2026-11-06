@@ -47,8 +47,8 @@ jobs:
             - name: Build and push image
               env:
                 ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }} # = public.ecr.aws
-                REGISTRY_ALIAS: s6y9v0i2
-                ECR_REPOSITORY: gh-actions-cicd
+                REGISTRY_ALIAS: ${{ vars.AWS_REGISTRY_ALIAS }}
+                ECR_REPOSITORY: ${{ vars.AWS_REPOSITORY }}
                 IMAGE_TAG: ${{ github.sha }}
               run: |
                 docker build -t ${{ env.ECR_REGISTRY}}/${{ env.REGISTRY_ALIAS }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} .
