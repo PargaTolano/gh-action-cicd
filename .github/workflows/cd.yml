@@ -3,16 +3,28 @@ run-name: Deploying New Builds
 on:
     workflow_run:
         workflows: ["ci-test"]
-        types:
-            - completed
+        types: [completed]
+        branches: [master]
+    workflow_dispatch:
+        inputs:
+            image-tag:
+                description: "Image tag to deployu (defaults to the current commit SHA)"
+                required: false
+permissions:
+    id-token: write # required for OIDC
+    contents: read  # required for checkout
+    actions: read   # required to download artifacts from another run
+concurrency:
+  group: cd-production
+  cancel-in-progress: false   # never kill a deployment halfway
+env:
+  SERVICE_NAME: go-app
+  CLUSTER: default
 jobs:
     deploy-ecs-express:
         runs-on: ubuntu-latest
-        if: github.event.workflow_run.conclusion == 'success'
-        permissions:
-            id-token: write # required for OIDC
-            contents: read  # required for checkout
-            actions: read   # required to download artifacts from another run
+        if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+
         env:
             ECR_REGISTRY: ${{ vars.AWS_REGISTRY }} # = public.ecr.aws
             REGISTRY_ALIAS: ${{ vars.AWS_REGISTRY_ALIAS }}
@@ -34,10 +46,18 @@ jobs:
                 audience: sts.amazonaws.com
                 role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
                 aws-region: ${{ vars.AWS_REGION }}
-            - name: Deploy to ECS Express Mode
+            - name: Deploy to ECS Express Mode       
+              id: deploy                                                              
               uses: aws-actions/amazon-ecs-deploy-express-service@v1
               with:
-                  service-name: go-app
+                  service-name: ${{ env.SERVICE_NAME }}
+                  cluster: ${{ env.CLUSTER }}
                   image: ${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.ECR_REPOSITORY }}:${{ steps.tag.outputs.image-tag }}
                   execution-role-arn: ${{ secrets.IAM_ECS_EXECUTION_ROLE }}
                   infrastructure-role-arn: ${{ secrets.IAM_ECS_INFRASTRUCTURE_ROLE }}
+            - name: Summary
+              run: |
+                echo "### Deployed :rocket:" >> "$GITHUB_STEP_SUMMARY"
+                echo "- Image tag: \`${{ steps.tag.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+                echo "- Service: ${{ steps.deploy.outputs.service-arn }}" >> "$GITHUB_STEP_SUMMARY"
+                echo "- Endpoint: ${{ steps.deploy.outputs.endpoint }}" >> "$GITHUB_STEP_SUMMARY"
