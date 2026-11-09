@@ -1,15 +1,16 @@
 name: cd-test
 run-name: Deploying New Builds
 on:
-    workflow_run:
-        workflows: ["ci-test"]
-        types: [completed]
-        branches: [master]
     workflow_dispatch:
-        inputs:
-            image-tag:
-                description: "Image tag to deployu (defaults to the current commit SHA)"
-                required: false
+      inputs:
+          cloud-service:
+              description: "Which cloud service will the image deploy to"
+              required: true
+              type: choice
+              options: [aws, gcp]
+          image-tag:
+              description: "Image tag to deploy (defaults to the current commit SHA)"
+              required: true
 permissions:
     id-token: write # required for OIDC
     contents: read  # required for checkout
@@ -17,20 +18,19 @@ permissions:
 concurrency:
   group: cd-production
   cancel-in-progress: false   # never kill a deployment halfway
-env:
-  SERVICE_NAME: go-app
-  CLUSTER: default
 jobs:
     deploy-ecs-express:
         runs-on: ubuntu-latest
-        if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
-
+        if: inputs.cloud-service == 'aws'
         env:
             ECR_REGISTRY: ${{ vars.AWS_REGISTRY }} # = public.ecr.aws
             REGISTRY_ALIAS: ${{ vars.AWS_REGISTRY_ALIAS }}
             ECR_REPOSITORY: ${{ vars.AWS_REPOSITORY }}
+            SERVICE_NAME: go-app
+            CLUSTER: default
         steps:
             - name: Download image tag from CI run
+              if: github.event_name != 'workflow_run'
               uses: actions/download-artifact@v4
               with:
                 name: image-tag
@@ -46,6 +46,11 @@ jobs:
                 audience: sts.amazonaws.com
                 role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
                 aws-region: ${{ vars.AWS_REGION }}
+            # - name: Verify image exists in ECR
+            #   run: |
+            #     aws ecr describe-images \
+            #     --repository-name "$ECR_REPOSITORY" \
+            #     --image-ids imageTag="${{ steps.tag.outputs.tag }}" > /dev/null
             - name: Deploy to ECS Express Mode       
               id: deploy                                                              
               uses: aws-actions/amazon-ecs-deploy-express-service@v1
@@ -61,3 +66,21 @@ jobs:
                 echo "- Image tag: \`${{ steps.tag.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
                 echo "- Service: ${{ steps.deploy.outputs.service-arn }}" >> "$GITHUB_STEP_SUMMARY"
                 echo "- Endpoint: ${{ steps.deploy.outputs.endpoint }}" >> "$GITHUB_STEP_SUMMARY"
+    deploy-gcp:
+      runs-on: ubuntu-latest
+      if: inputs.cloud-service == 'gcp'
+      steps:
+        - name: Setup Google Auth
+          id: auth
+          uses: google-github-actions/auth@12060449e87204eca501a11f2f7f1483024afff0
+          with:
+            workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+            service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+        - name: Deploy to CloudRun
+          id: deploy
+          uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d
+          with:
+            service: ${{ vars.GCP_SERVICE_NAME }}
+            image: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_AR_REPO }}/${{ vars.GCP_SERVICE_NAME }}:${{ inputs.image-tag }}
+        - name: 'Accepting test'
+          run: 'curl "${{ steps.deploy.outputs.url }}"'

@@ -4,16 +4,35 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"net/http"
 
 	"github.com/joho/godotenv"
 )
 
+func indexHandler(w http.ResponseWriter, r *http.Request) {
+	customGreeting := os.Getenv("CUSTOM_GREETING")
+	if customGreeting == "" {
+		customGreeting = "Hola!"
+	}
+	fmt.Fprintf(w, "CI CD Testing! %s", customGreeting)
+}
+
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
+	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
+		log.Fatalf("Error loading .env: %v", err)
 	}
 
-	customGreeting := os.Getenv("CUSTOM_GREETING")
-	fmt.Println(fmt.Sprintf("CI CD Testing! %s", customGreeting))
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/", indexHandler)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	fmt.Printf("Starting server in port %s\n", port)
+
+	finalPort := fmt.Sprintf(":%s", port)
+	if err := http.ListenAndServe(finalPort, mux); err != nil {
+		log.Fatalf("Server failed to start: %v", err)
+	}
 }
