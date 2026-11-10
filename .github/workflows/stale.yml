@@ -1,0 +1,15 @@
+name: Close stale issues and PRs
+run-name: close-stale
+
+on:
+    schedule:
+        - cron: '30 1 * * *'
+jobs:
+    stale:
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/stale@v7
+          with:
+            stale-issue-message: 'Este Issue no tiene actividad desde hace más de 60 días, si no tiene actividad en los próximos 7 días, se eliminará'
+            stale-pr-message: 'Este Pull Request no tiene actividad desde hace más de 60 días, si no tiene actividad en los próximos 7 días, se eliminará'
+            stale-pr-label: 'sin-actividad'

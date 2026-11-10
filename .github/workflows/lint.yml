@@ -1,0 +1,25 @@
+name: Code formatting
+run-name: lint
+on: [push]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SCM Checkout
+        uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - name: Golangci lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.13
+      - uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "Auto-fix linting issues"
+          branch: ${{ github.head_ref }}
+          commit_options: '--signoff'
+          commit_user_name: github-actions[bot]
+          commit_user_email: 41898282+github-actions[bot]@users.noreply.github.com
+          commit_author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
