@@ -12,14 +12,24 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: stable
-      - name: Golangci lint
+      - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v9
-        continue-on-error: true
         with:
           version: v2.15
-          args: --fix
-      - uses: stefanzweifel/git-auto-commit-action@v4
+          install-only: true
+      - name: Format code
+        run: golangci-lint fmt
+      - name: Lint and auto-fix
+        id: lint
+        continue-on-error: true
+        run: golangci-lint run --fix
+      - name: Commit fixes
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "Auto-fix linting issues"
-          branch: ${{ github.head_ref }}
           commit_options: '--signoff'
+      - name: Fail if unfixable issues remain
+        if: steps.lint.outcome == 'failure'
+        run: |
+          echo "::error::golangci-lint found issues it could not fix automatically. See the 'Lint and auto-fix' step."
+          exit 1
