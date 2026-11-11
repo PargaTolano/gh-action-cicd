@@ -14,7 +14,9 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	if customGreeting == "" {
 		customGreeting = "Hola!"
 	}
-	fmt.Fprintf(w, "CI CD Testing! %s", customGreeting)
+	if _, err := fmt.Fprintf(w, "CI CD Testing! %s", customGreeting); err != nil {
+		log.Printf("failed to write response: %v", err)
+	}
 }
 
 func main() {
